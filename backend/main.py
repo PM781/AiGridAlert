@@ -15,9 +15,11 @@ except ImportError:
     RESOURCES = data_assets.RESOURCES
     RISK_CATEGORIES = data_assets.RISK_CATEGORIES
 
+# Define Base Directory and Load .env
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+# Initialize Gemini Client
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 app = FastAPI()
 
@@ -31,12 +33,12 @@ with open(os.path.join(BASE_DIR, "data", "district_risk.json"), "r") as f:
 @app.post("/analyze")
 async def analyze_incident(data: dict):
     user_text = data.get("text")
-    # Capture the manual location from your new frontend field
     manual_loc = data.get("manual_location", "") 
     
-    # Updated Prompt to include manual location context
+    # Extract all categories for the AI prompt
     categories = []
-    for cat in RISK_CATEGORIES.values(): categories.extend(cat.keys())
+    for cat in RISK_CATEGORIES.values(): 
+        categories.extend(cat.keys())
     
     prompt = f"""
     Act as a Karnataka Triage Officer. 
@@ -50,18 +52,25 @@ async def analyze_incident(data: dict):
     """
 
     try:
+        # 1. AI Generation Call
         response = client.models.generate_content(
             model="gemini-1.5-flash",
             contents=prompt,
             config={'response_mime_type': 'application/json'}
         )
-        ai_output = json.loads(response.text)
         
-        # Override with manual location if provided
+        # 2. Robust Markdown & JSON Parsing
+        raw_text = response.text.strip()
+        if raw_text.startswith("```"):
+            raw_text = raw_text.replace("```json", "").replace("```", "").strip()
+            
+        ai_output = json.loads(raw_text)
+        
+        # 3. Manual Location Priority
         if manual_loc:
             ai_output['location'] = manual_loc
 
-        # 1. Refine Severity with Safety Fallbacks
+        # 4. Refine Severity with Safety Fallbacks
         ai_output['final_severity'] = calculate_hybrid_weight(
             ai_output.get('severity', 5), 
             user_text, 
@@ -70,7 +79,7 @@ async def analyze_incident(data: dict):
             DISTRICT_RISK
         )
         
-        # 2. Extract Checklist based on Category
+        # 5. Extract Checklist based on Category
         d_type = ai_output.get('disaster_type')
         checklist = []
         for cat in RISK_CATEGORIES.values():
@@ -79,7 +88,7 @@ async def analyze_incident(data: dict):
                 break
         ai_output['checklist'] = checklist if checklist else ["Area Secured", "People Evacuated"]
 
-        # 3. Resource Safety Check (Prevents 500 Error if unit key is missing)
+        # 6. Resource Safety Check
         rec_unit = ai_output.get('recommended_unit', 'SDRF Alpha Team')
         ai_output['recommended_unit'] = rec_unit
         ai_output['resource_status'] = RESOURCES.get(rec_unit, "Units on Standby")
@@ -87,9 +96,10 @@ async def analyze_incident(data: dict):
         return ai_output
 
     except Exception as e:
-        print(f"CRITICAL ERROR: {str(e)}") # Log to your terminal
-        raise HTTPException(status_code=500, detail=str(e))
+        # Log error locally but hide sensitive details from frontend
+        print(f"CRITICAL DISPATCH ERROR: {str(e)}") 
+        raise HTTPException(status_code=500, detail="AI Analysis Failed. Check terminal.")
 
-# Static mounting remains at the very end
+# Static mounting at the end
 static_path = os.path.join(BASE_DIR, "static")
 app.mount("/", StaticFiles(directory=static_path, html=True), name="static")
