@@ -1,0 +1,52 @@
+[
+    {
+        "text": "Yelahanka railway station hathira mane olage neeru barthide, please help!",
+        "type": "Urban Flood",
+        "district": "Bengaluru Urban"
+    },
+    {
+        "text": "Massive landslide on Madikeri-Mangalore road near Jodupla. Two cars buried.",
+        "type": "Landslide",
+        "district": "Kodagu"
+    },
+    {
+        "text": "Raichur jilleyalli 3 days inda kudiyuva neerilla. Crops are dying.",
+        "type": "Drought",
+        "district": "Raichur"
+    },
+    {
+        "text": "Building collapse in Shivamogga market area after heavy rains. People trapped inside.",
+        "type": "Infra Collapse",
+        "district": "Shivamogga"
+    },
+    {
+        "text": "Udupi beach side high tide neeru shops olage barthide. Fishermen are stuck.",
+        "type": "Coastal Flood",
+        "district": "Udupi"
+    },
+    {
+        "text": "Pregnant woman in Kalaburagi village needs urgent transport, but no ambulance available.",
+        "type": "Medical Emergency",
+        "district": "Kalaburagi"
+    },
+    {
+        "text": "Heavy fire at Belagavi industrial area. Multiple workers have burn injuries.",
+        "type": "Fire",
+        "district": "Belagavi"
+    },
+    {
+        "text": "Krishna river water level crossing danger mark near Almatti. Villages need evacuation.",
+        "type": "Riverine Flood",
+        "district": "Belagavi"
+    },
+    {
+        "text": "Uttara Kannada forest fire near Dandeli spreading fast toward residential zones.",
+        "type": "Forest Fire",
+        "district": "Uttara Kannada"
+    },
+    {
+        "text": "Open borewell accident in Ballari. A small child has fallen inside.",
+        "type": "Medical/Infra",
+        "district": "Ballari"
+    }
+]

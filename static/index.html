@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AiGridAlert | Dispatch Command</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Natural Earth-Tone Palette */
+        body { background-color: #EADED0; color: #4A3728; transition: all 0.5s ease; overflow-x: hidden; }
+        .sidebar { background-color: #95714F; color: white; }
+        .btn-sage { background-color: #ACB087; color: white; transition: all 0.2s; }
+        .btn-sage:hover { background-color: #8C916C; transform: translateY(-1px); }
+        
+        /* SYSTEM BOOT & BLUR LOGIC */
+        #main-app { transition: filter 0.8s ease, opacity 0.8s ease; }
+        .system-offline { filter: blur(15px); pointer-events: none; opacity: 0.5; }
+        
+        /* Modal and Banner Styles */
+        .modal-bg { background: rgba(44, 33, 24, 0.95); backdrop-filter: blur(10px); }
+        .emergency-banner { background-color: #555; color: white; transition: background 0.5s; }
+        .banner-online { background-color: #D64545 !important; }
+        
+        .glass-card { background: white; border: 2px solid #C7AF94; transition: all 0.2s; }
+        .glass-card:hover { border-color: #c3d331; transform: translateY(-2px); }
+        .active-btn { border-color: #92a12e !important; background-color: #F5F1ED !important; }
+
+        /* Custom Scrollbar for Sidebar */
+        .sidebar-scroll::-webkit-scrollbar { width: 4px; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <div id="loginModal" class="fixed inset-0 z-50 flex items-center justify-center modal-bg">
+        <div class="bg-[#EADED0] p-10 rounded-3xl shadow-2xl w-[450px] border-4 border-[#95714F] text-center">
+            <div class="mb-6">
+                <i class="fas fa-shield-halved text-6xl text-[#95714F] mb-4"></i>
+                <h2 class="text-3xl font-black text-[#4A3728] uppercase tracking-tighter">System Access</h2>
+                <p class="text-sm font-bold text-[#95714F]">AiGRIDALERT v2.0 | KARNATAKA DIVISION</p>
+            </div>
+            <div class="space-y-4 text-left">
+                <label class="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Personnel Name</label>
+                <input type="text" id="opName" placeholder="ENTER USER NAME" 
+                       class="w-full p-4 rounded-xl border-2 border-[#C7AF94] outline-none font-bold focus:border-[#ACB087] transition-colors">
+                <button onclick="saveLogin()" 
+                        class="w-full btn-sage py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:scale-[1.02] active:scale-95 transition-all mt-2">
+                    Initialize System
+                </button>
+            </div>
+            <div class="mt-8 flex items-center justify-center gap-2">
+                <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Awaiting Secure Link...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="historyModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center modal-bg">
+        <div class="bg-[#EADED0] p-8 rounded-3xl shadow-2xl w-[600px] max-h-[80vh] border-4 border-[#95714F] flex flex-col">
+            <div class="flex justify-between items-center mb-6 border-b-2 border-[#C7AF94] pb-3">
+                <h2 class="text-2xl font-black text-[#4A3728] uppercase tracking-tighter">Mission History</h2>
+                <button onclick="closeHistory()" class="text-[#95714F] hover:text-red-500 transition-colors">
+                    <i class="fas fa-times-circle text-2xl"></i>
+                </button>
+            </div>
+            <div id="historyLog" class="flex-1 overflow-y-auto space-y-3 pr-2 sidebar-scroll">
+                <p class="text-center py-10 text-xs font-bold opacity-30 uppercase tracking-widest">No previous missions logged</p>
+            </div>
+            <button onclick="clearHistory()" class="mt-6 text-[10px] font-black text-red-600 uppercase tracking-widest hover:underline">
+                Wipe Mission Logs
+            </button>
+        </div>
+    </div>
+
+    <div id="main-app" class="system-offline flex flex-col h-screen">
+        
+        <div id="topBanner" class="emergency-banner py-2 px-6 flex justify-between items-center font-bold text-[10px] uppercase tracking-widest shadow-md">
+            <span><i class="fas fa-phone-alt mr-2"></i> Karnataka Emergency: 112</span>
+            <span id="operatorDisplay">OFFLINE</span>
+        </div>
+
+        <div class="flex flex-1 overflow-hidden">
+            <aside class="sidebar w-64 p-6 flex flex-col shadow-2xl h-screen sticky top-0">
+                <div class="mb-8">
+                    <h1 class="text-3xl font-black italic tracking-tighter leading-none">AIGRID<br>ALERT</h1>
+                    <div class="mt-6 space-y-4">
+                        <div id="sideUser" class="p-3 bg-white/10 rounded-xl border border-white/10">
+                            <p class="text-[9px] font-black opacity-50 uppercase tracking-widest mb-1">Active Session</p>
+                            <p id="sideUserName" class="text-xs font-bold truncate">Operator: Offline</p>
+                        </div>
+                        <div class="flex items-center gap-3 text-[10px] font-bold opacity-70">
+                            <i class="fas fa-circle text-[6px] text-green-400 animate-pulse"></i> AI Core: Ready
+                        </div>
+                    </div>
+                </div>
+
+                <nav class="flex-1 space-y-1 overflow-y-auto sidebar-scroll">
+                    <p class="text-[10px] font-black opacity-40 uppercase mb-3 tracking-widest">Management</p>
+                    <button onclick="showProfile()" class="w-full text-left p-3 rounded-xl hover:bg-white/10 flex items-center gap-3 transition-all text-sm font-medium">
+                        <i class="fas fa-user-circle w-4"></i> User Details
+                    </button>
+                    <button class="w-full text-left p-3 rounded-xl hover:bg-white/10 flex items-center gap-3 transition-all text-sm font-medium">
+                        <i class="fas fa-user-gear w-4"></i> Manage Account
+                    </button>
+                    <button onclick="showHistory()" class="w-full text-left p-3 rounded-xl hover:bg-white/10 flex items-center gap-3 transition-all text-sm font-medium">
+                        <i class="fas fa-clock-rotate-left w-4"></i> Previous Reports
+                    </button>
+
+                    <p class="text-[10px] font-black opacity-40 uppercase mt-6 mb-3 tracking-widest">Emergency Directory</p>
+                    <div class="space-y-2 p-3 bg-black/10 rounded-xl border border-white/5">
+                        <div class="flex justify-between items-center text-[10px]">
+                            <span class="opacity-70">Police HQ</span>
+                            <span class="font-mono font-bold text-[#ACB087]">112</span>
+                        </div>
+                        <div class="flex justify-between items-center text-[10px]">
+                            <span class="opacity-70">Ambulance</span>
+                            <span class="font-mono font-bold text-[#ACB087]">108</span>
+                        </div>
+                        <div class="flex justify-between items-center text-[10px]">
+                            <span class="opacity-70">Fire Dept</span>
+                            <span class="font-mono font-bold text-[#ACB087]">101</span>
+                        </div>
+                    </div>
+                </nav>
+
+                <div class="pt-6 border-t border-white/10 space-y-3">
+                    <button onclick="loadDemoScenario()" class="w-full bg-white/10 border border-white/20 py-3 rounded-xl text-[10px] font-bold uppercase hover:bg-white/20 transition-all">
+                        Load Mock Report
+                    </button>
+                    <button onclick="logout()" class="w-full bg-red-500/20 text-red-200 border border-red-500/30 py-3 rounded-xl text-[10px] font-bold uppercase hover:bg-red-500/40 transition-all">
+                        <i class="fas fa-power-off mr-2"></i> Log Out
+                    </button>
+                </div>
+            </aside>
+
+            <main class="flex-1 p-8 overflow-y-auto">
+                <div class="flex justify-between items-end mb-8">
+                    <h2 class="text-4xl font-black uppercase tracking-tighter">Command Center</h2>
+                    <div id="clock" class="text-2xl font-mono font-bold text-[#95714F]"></div>
+                </div>
+
+                <div id="disasterGrid" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+                    <button id="btn-Flood" onclick="selectDisaster('Flood')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-house-flood-water text-2xl text-[#95714F] mb-2"></i>
+                        <span class="text-sm font-bold text-center">Flood | ಪ್ರವಾಹ | बाढ़</span>
+                    </button>
+                    <button id="btn-Landslide" onclick="selectDisaster('Landslide')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-hill-rockslide text-2xl text-[#95714F] mb-2"></i>
+                        <span class="text-sm font-bold text-center">Landslide | ಕುಸಿತ | भूस्खलन</span>
+                    </button>
+                    <button id="btn-ForestFire" onclick="selectDisaster('Forest Fire')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-fire-extinguisher text-2xl text-[#95714F] mb-2"></i>
+                        <span class="text-sm font-bold text-center">Forest Fire | ಕಾಡ್ಗಿಚ್ಚು | वनाग्नि</span>
+                    </button>
+                    <button id="btn-Cyclone" onclick="selectDisaster('Cyclone')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-wind text-2xl text-[#95714F] mb-2"></i>
+                        <span class="text-sm font-bold text-center">Cyclone | ಚಂಡಮಾರುತ | चक्रवात</span>
+                    </button>
+                    <button id="btn-Drought" onclick="selectDisaster('Drought')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-sun-plant-wilt text-2xl text-[#95714F] mb-2"></i>
+                        <span class="text-sm font-bold text-center">Drought | ಬರಗಾಲ | सूखा</span>
+                    </button>
+                    <button id="btn-BuildingCollapse" onclick="selectDisaster('Building Collapse')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-building-circle-exclamation text-2xl text-orange-600 mb-2"></i>
+                        <span class="text-sm font-bold text-center">Structure | ಕಟ್ಟಡ ಕುಸಿತ | भवन पतन</span>
+                    </button>
+                    <button id="btn-BridgeCollapse" onclick="selectDisaster('Bridge Collapse')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-bridge-circle-xmark text-2xl text-orange-600 mb-2"></i>
+                        <span class="text-sm font-bold text-center">Bridge | ಸೇತುವೆ ಕುಸಿತ | पुल ढहना</span>
+                    </button>
+                    <button id="btn-RoadDamage" onclick="selectDisaster('Road Damage')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-road-barrier text-2xl text-orange-600 mb-2"></i>
+                        <span class="text-sm font-bold text-center">Roads | ರಸ್ತೆ ಹಾನಿ | सड़क क्षति</span>
+                    </button>
+                    <button id="btn-DamRisk" onclick="selectDisaster('Dam Risk')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-faucet-drip text-2xl text-orange-600 mb-2"></i>
+                        <span class="text-sm font-bold text-center">Dam | ಅಣೆಕಟ್ಟು ಅಪಾಯ | बाँध क्षति</span>
+                    </button>
+                    <button id="btn-PowerGrid" onclick="selectDisaster('Power Grid')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-bolt-lightning text-2xl text-orange-600 mb-2"></i>
+                        <span class="text-sm font-bold text-center">Power | ವಿದ್ಯುತ್ ಸ್ಥಗಿತ | बिजली विफलता</span>
+                    </button>
+                    <button id="btn-Medical" onclick="selectDisaster('Medical')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-truck-medical text-2xl text-red-600 mb-2"></i>
+                        <span class="text-sm font-bold text-center">Medical | ವೈದ್ಯಕೀಯ | चिकित्सा</span>
+                    </button>
+                    <button id="btn-IndustrialLeak" onclick="selectDisaster('Industrial Leak')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-biohazard text-2xl text-red-600 mb-2"></i>
+                        <span class="text-sm font-bold text-center">Chemical | ಸೋರಿಕೆ | रासायनिक रिसाव</span>
+                    </button>
+                    <button id="btn-Explosion" onclick="selectDisaster('Explosion')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-burst text-2xl text-red-600 mb-2"></i>
+                        <span class="text-sm font-bold text-center">Explosion | ಸ್ಫೋಟ | विस्फोट</span>
+                    </button>
+                    <button id="btn-UrbanFire" onclick="selectDisaster('Urban Fire')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-fire text-2xl text-red-600 mb-2"></i>
+                        <span class="text-sm font-bold text-center">Urban Fire | ಬೆಂಕಿ | शहरी आग</span>
+                    </button>
+                    <button id="btn-Accident" onclick="selectDisaster('Accident')" class="glass-card flex flex-col items-center p-4 rounded-2xl group">
+                        <i class="fas fa-car-burst text-2xl text-red-600 mb-2"></i>
+                        <span class="text-sm font-bold text-center">Accident | ಅಪಘಾತ | दुर्घटना</span>
+                    </button>
+                </div>
+
+                <div id="inlineChecklist" class="hidden w-full bg-white p-8 rounded-3xl border-2 border-[#ACB087] shadow-2xl mb-10 animate-in slide-in-from-top duration-300">
+                    <div class="flex justify-between items-center mb-6 border-b border-slate-100 pb-3">
+                        <h3 id="checklistTitle" class="text-xs font-black uppercase text-[#95714F] tracking-[0.2em] flex items-center gap-2">
+                            <i class="fas fa-clipboard-check text-lg"></i> Field Verification
+                        </h3>
+                    </div>
+                    <div id="dynamicChecklist" class="w-full"></div>
+                </div>
+
+                <div class="bg-white p-6 rounded-3xl border-2 border-[#C7AF94] shadow-xl max-w-4xl mx-auto">
+                    
+                    <div class="flex items-center gap-3 mb-4 p-3 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner group focus-within:border-[#ACB087] transition-all">
+                        <div class="bg-[#95714F] text-white w-10 h-10 flex items-center justify-center rounded-xl shadow-md">
+                            <i class="fas fa-map-location-dot"></i>
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Incident Site / Landmarks</label>
+                            <input type="text" id="manualLocation" 
+                                   class="w-full bg-transparent outline-none font-bold text-sm uppercase placeholder:text-slate-300" 
+                                   placeholder="e.g. Near Agumbe Ghat, Milestone 42...">
+                        </div>
+                    </div>
+
+                    <textarea id="rawInput" class="w-full h-32 bg-slate-50 rounded-2xl p-5 text-sm border-none shadow-inner outline-none focus:ring-2 focus:ring-[#ACB087]" placeholder="Detailed triage report..."></textarea>
+                    
+                    <button onclick="processData()" id="btnText" class="w-full mt-4 btn-sage py-5 rounded-2xl font-black uppercase shadow-lg tracking-widest hover:scale-[1.01] transition-all">
+                        Finalize & Initiate Dispatch
+                    </button>
+                </div>
+
+                <div id="feedContainer" class="mt-8 space-y-4 pb-20"></div>
+            </main>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
