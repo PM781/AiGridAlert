@@ -6,7 +6,38 @@ from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 from dotenv import load_dotenv
 
-# Relative imports to fix ModuleNotFoundError
+# -----------------------------
+# Load Environment Variables
+# -----------------------------
+load_dotenv()
+
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+
+if not GEMINI_KEY:
+    print("❌ GEMINI_API_KEY not found in environment variables!")
+else:
+    print("✅ Gemini API Key Loaded Successfully")
+
+# -----------------------------
+# Initialize Gemini Client
+# -----------------------------
+client = genai.Client(api_key=GEMINI_KEY)
+
+app = FastAPI()
+
+# -----------------------------
+# Enable CORS
+# -----------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# -----------------------------
+# Import Local Assets
+# -----------------------------
 try:
     from .data_assets import calculate_hybrid_weight, RESOURCES, RISK_CATEGORIES
 except ImportError:
@@ -15,91 +46,120 @@ except ImportError:
     RESOURCES = data_assets.RESOURCES
     RISK_CATEGORIES = data_assets.RISK_CATEGORIES
 
-# Define Base Directory and Load .env
+# -----------------------------
+# Load District Risk Data
+# -----------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-# Initialize Gemini Client
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-app = FastAPI()
+try:
+    with open(os.path.join(BASE_DIR, "data", "district_risk.json"), "r") as f:
+        DISTRICT_RISK = json.load(f)
+except Exception as e:
+    print("⚠️ Could not load district_risk.json:", e)
+    DISTRICT_RISK = {}
 
-# Enable CORS for frontend communication
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# -----------------------------
+# Stable Model Selection
+# -----------------------------
+ACTIVE_MODEL = "models/gemini-2.5-flash"
 
-# Load risk data
-with open(os.path.join(BASE_DIR, "data", "district_risk.json"), "r") as f:
-    DISTRICT_RISK = json.load(f)
-
+# -----------------------------
+# Analyze Endpoint
+# -----------------------------
 @app.post("/analyze")
 async def analyze_incident(data: dict):
-    user_text = data.get("text")
-    manual_loc = data.get("manual_location", "") 
-    
-    # Extract all categories for the AI prompt
-    categories = []
-    for cat in RISK_CATEGORIES.values(): 
-        categories.extend(cat.keys())
-    
-    prompt = f"""
-    Act as a Karnataka Triage Officer. 
-    Analyze Report: "{user_text}"
-    Manual Site Context: "{manual_loc}"
-    
-    Classify into EXACTLY one category: {categories}.
-    Identify District, Precise Location, Severity (1-10), and a 1-sentence Summary.
-    Identify the most appropriate 'recommended_unit' from this list: {list(RESOURCES.keys())}.
-    Return ONLY valid JSON.
-    """
-
     try:
-        # 1. AI Generation Call
+        user_text = data.get("text", "")
+        manual_loc = data.get("manual_location", "")
+
+        if not user_text:
+            raise HTTPException(status_code=400, detail="No report text provided")
+
+        # Flatten risk categories safely
+        categories = []
+        for cat in RISK_CATEGORIES.values():
+            if isinstance(cat, dict):
+                categories.extend(cat.keys())
+            elif isinstance(cat, list):
+                categories.extend(cat)
+
+        prompt = f"""
+        Act as a Karnataka Disaster Triage Officer.
+
+        Analyze Report: "{user_text}"
+        Manual Site Context: "{manual_loc}"
+
+        Classify into EXACTLY one category from:
+        {categories}
+
+        Return JSON with:
+        - disaster_type
+        - district
+        - location
+        - severity (1-10 integer)
+        - summary (1 sentence)
+        - recommended_unit (choose from {list(RESOURCES.keys())})
+
+        Return ONLY valid JSON.
+        """
+
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model=ACTIVE_MODEL,
             contents=prompt,
-            config={'response_mime_type': 'application/json'}
+            config={"response_mime_type": "application/json"}
         )
-        
-        # 2. Robust Markdown & JSON Parsing
+
         raw_text = response.text.strip()
+
+        # Clean accidental markdown formatting
         if raw_text.startswith("```"):
             raw_text = raw_text.replace("```json", "").replace("```", "").strip()
-            
-        ai_output = json.loads(raw_text)
-        
-        # 3. Manual Location Priority
-        if manual_loc:
-            ai_output['location'] = manual_loc
 
-        # 4. Refine Severity with Safety Fallbacks
-        ai_output['final_severity'] = calculate_hybrid_weight(
-            ai_output.get('severity', 5), 
-            user_text, 
-            ai_output.get('district', 'Unknown'), 
-            ai_output.get('disaster_type', 'General'), 
+        print("🔎 RAW GEMINI OUTPUT:", raw_text)
+
+        ai_output = json.loads(raw_text)
+
+        # Manual location override
+        if manual_loc:
+            ai_output["location"] = manual_loc
+
+        # Hybrid severity refinement
+        ai_output["final_severity"] = calculate_hybrid_weight(
+            ai_output.get("severity", 5),
+            user_text,
+            ai_output.get("district", "Unknown"),
+            ai_output.get("disaster_type", "General"),
             DISTRICT_RISK
         )
-        
-        # 5. Extract Checklist based on Category
-        d_type = ai_output.get('disaster_type')
+
+        # Checklist extraction
+        d_type = ai_output.get("disaster_type")
         checklist = []
+
         for cat in RISK_CATEGORIES.values():
-            if d_type in cat:
+            if isinstance(cat, dict) and d_type in cat:
                 checklist = cat[d_type]
                 break
-        ai_output['checklist'] = checklist if checklist else ["Area Secured", "People Evacuated"]
 
-        # 6. Resource Safety Check
-        rec_unit = ai_output.get('recommended_unit', 'SDRF Alpha Team')
-        ai_output['recommended_unit'] = rec_unit
-        ai_output['resource_status'] = RESOURCES.get(rec_unit, "Units on Standby")
-        
+        ai_output["checklist"] = checklist if checklist else [
+            "Area Secured",
+            "People Evacuated"
+        ]
+
+        # Resource status
+        rec_unit = ai_output.get("recommended_unit", "SDRF Alpha Team")
+        ai_output["recommended_unit"] = rec_unit
+        ai_output["resource_status"] = RESOURCES.get(rec_unit, "Units on Standby")
+
         return ai_output
 
     except Exception as e:
-        # Log error locally but hide sensitive details from frontend
-        print(f"CRITICAL DISPATCH ERROR: {str(e)}") 
-        raise HTTPException(status_code=500, detail="AI Analysis Failed. Check terminal.")
+        print("🚨 CRITICAL DISPATCH ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
-# Static mounting at the end
+
+# -----------------------------
+# Static Frontend Mount
+# -----------------------------
 static_path = os.path.join(BASE_DIR, "static")
 app.mount("/", StaticFiles(directory=static_path, html=True), name="static")
